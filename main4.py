@@ -36,7 +36,7 @@ driver.get(url)
 # context = driver.find_element('xpath',
 #       r"/html/body/div[2]/div[1]/div[7]/div[2]/div[2]/div[1]/div/div[1]/textarea").text
 # context = driver.find_element('xpath',"/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
-async def recognize(context =None):
+async def recognize(context=None):
     cmd = """ ./ffmpeg.exe -f dshow -i audio="VoiceMeeter Output (VB-Audio VoiceMeeter VAIO)" -y -t 00:00:04 sample.mp3"""
     args = shlex.split(cmd)
 
@@ -64,7 +64,8 @@ async def recognize(context =None):
     name = name_search['search']['anime'][0]['name']
     print(f"entering res:{name}")
     if context is None:
-        context = driver.find_element('xpath',"/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
+        context = driver.find_element('xpath',
+                                      "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
     context.send_keys(f"{name}\n")
 
     # https://api.animethemes.moe/search?q={Bocchi%20The%20Rock}&page[limit]=1
@@ -90,9 +91,12 @@ loop = asyncio.get_event_loop()
 
 def play_game():
     tmp = pd.read_json('mem.jsonl', lines=True)
+
     context = driver.find_element('xpath',
                                   "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
-    mem_dict = tmp.to_dict()
+    j = tmp.to_dict(orient='list')
+    mem_dict = dict(zip(j['song'], j['anime']))
+
     song_idx = 0
     ref_idx = driver.find_element('xpath',
                                   "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[1]/div[1]/div/span[1]")
@@ -113,6 +117,8 @@ def play_game():
             if not status:
                 try:
                     song, anime, status = loop.run_until_complete(recognize())
+                    if not status and song in mem_dict.keys():
+                        context.send_keys(mem_dict.get(song))
                 except ElementNotInteractableException:
                     print("ElementNotInteractableException giving up")
                     status = True
@@ -124,11 +130,12 @@ def play_game():
             print(f"savimg {song}  with \b {last_ans}")
             mem_dict[song] = last_ans
             with open("mem.jsonl", "a") as mem_file:
-                mem_file.write(json.dumps({song: last_ans}))
+                mem_file.write(json.dumps({"song": song,
+                                           "anime": last_ans}))
                 mem_file.write("\n")
             song_idx = ref_idx.text
         # wait to next round
         print("wating for next round")
         while song_idx == ref_idx.text:
-            print(".",end="")
+            print(".", end="")
             sleep(2)
