@@ -43,7 +43,7 @@ async def recognize():
     print(cmd)
     args = shlex.split(cmd)
     subprocess.Popen(args)
-    sleep(6)
+    sleep(7)
     shazam = Shazam()
     out = await shazam.recognize_song(r'Z:\TEMP\sample.mp3')
     if ('track' not in out.keys()) or 'title' not in out['track']:
@@ -72,7 +72,8 @@ def find_anime(song):
     songe_title_clean = re.sub(r'\(.*\)', '', song).lower()
     print(songe_title_clean)
     tmp = requests.get(f"https://api.animethemes.moe/search?q={{{songe_title_clean}}}&page[limit]=1").json()
-    if not tmp['search']['videos']:
+    if  (tmp is None) or not tmp['search']['videos']:
+        print(" not tmp['search']['videos']")
         return None
     tmp_name = tmp['search']['videos'][0]['basename']
     print(tmp_name)
@@ -81,7 +82,7 @@ def find_anime(song):
     lower_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', camel_name).lower()
     name_search = requests.get(f"https://api.animethemes.moe/search?q={{{lower_name}}}&page[limit]=1").json()
     if not tmp['search']['anime']:
-        return None
+        return lower_name
     name = name_search['search']['anime'][0]['name']
     return name
 
@@ -100,21 +101,23 @@ def play_game():
                                 "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[2]/div/div/div[1]/div[5]/div")
     while true_ans.is_displayed():
         status = False
-        song = loop.run_until_complete(recognize())
         left = count.text
         while not status:
             status, song = loop.run_until_complete(recognize())
 
-        if (song is not None):
-            if (song in mem_dict.keys()):
+        if song is not None:
+            if song in mem_dict.keys():
                 print(f"remembered that {song} is form  {mem_dict.get(song)} ")
                 anime = mem_dict.get(song)
             else:
-                anime = find_anime(song)
+                try:
+                    anime = find_anime(song)
+                except Exception as e:
+                    print(e)
             try:
                 context.send_keys(anime)
-            except ElementNotInteractableException:
-                print("ElementNotInteractableException giving up")
+            except Exception:
+                print(f"anime is {anime}")
         else:
             print("song is None, giving up")
 
