@@ -80,6 +80,8 @@ def find_anime(song):
     camel_name = re.findall("[^-]+", tmp_name)[0]
     print(camel_name)
     lower_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', camel_name).lower()
+    if "OP" in tmp_name or "ED" in tmp_name:
+        return lower_name
     name_search = requests.get(f"https://api.animethemes.moe/search?q={{{lower_name}}}&page[limit]=1").json()
     if not tmp['search']['anime']:
         return lower_name
