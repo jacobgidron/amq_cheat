@@ -3,6 +3,9 @@ import json
 from time import sleep
 import re
 
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
 from selenium.common import ElementNotInteractableException
 from shazamio import Shazam
 from selenium import webdriver
@@ -11,41 +14,18 @@ import sys, getopt, subprocess, shlex
 import requests
 import pandas as pd
 
-# from xvfbwrapper import Xvfb
-
-# def run():
-
-print('Capture website stream')
-
-# xvfb = Xvfb(width=1280, height=720, colordepth=24)
-
-# xvfb.start()
-# options = Options()
-# options.add_argument("--headless")
-driver = webdriver.Chrome()
-
+FILE_PATH = r"Z:\TEMP\sample.mp3"
+SONG_TO_ANIME_SEARCH_PATTERN = "https://api.animethemes.moe/search?fields[search]=videos&q={{{}}}&page[limit]=1"
+ANIME_SEARCH_PATTERN = "https://api.animethemes.moe/search?fields[search]=anime&q={{{}}}&page[limit]=1"
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+shazam = Shazam()
 url = 'https://animemusicquiz.com/'
-
 driver.get(url)
-
-
-# //*[@id="qpAnswerInput"]
-# r"/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input"
-# context = driver.find_element('xpath',
-#       r"/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input").text
-# context = driver.find_element('xpath',
-#       r"/html/body/div[2]/div[1]/div[7]/div[2]/div[2]/div[1]/div/div[1]/textarea").text
-# context = driver.find_element('xpath',"/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
 async def recognize():
-    file_path = r" Z:\TEMP\sample.mp3"
-    cmd = """./ffmpeg.exe -f dshow -i audio="VoiceMeeter Output (VB-Audio VoiceMeeter VAIO)" -y -t 00:00:04 Z:/TEMP/sample.mp3"""
-    # cmd = """ ./ffmpeg.exe -f dshow -i audio="VoiceMeeter Output (VB-Audio VoiceMeeter VAIO)" -y -t 00:00:04 sample.mp3"""
-    print(cmd)
+    cmd = """./ffmpeg.exe -loglevel quiet -stats -f dshow -i audio="VoiceMeeter Output (VB-Audio VoiceMeeter VAIO)" -y -t 00:00:04 Z:/TEMP/sample.mp3"""
     args = shlex.split(cmd)
-    subprocess.Popen(args)
-    sleep(7)
-    shazam = Shazam()
-    out = await shazam.recognize_song(r'Z:\TEMP\sample.mp3')
+    subprocess.call(args)
+    out = await shazam.recognize(FILE_PATH)
     if ('track' not in out.keys()) or 'title' not in out['track']:
         return False, None
     songe_title = out['track']['title']
@@ -55,52 +35,39 @@ async def recognize():
 
 loop = asyncio.get_event_loop()
 
-
-# out = loop.run_until_complete(recognize())
-
-
-# https://api.animethemes.moe/search?q={Bocchi%20The%20Rock}&page[limit]=1
-
-#  answer is in
-# /html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[1]/div[2]
-# number songs
-# /html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[1]/div[1]/div/span[1]
-
-# start button
-# /html/body/div[2]/div[1]/div[7]/div[1]/div[1]/div[1]/div[4]/h1
 def find_anime(song):
     songe_title_clean = re.sub(r'\(.*\)', '', song).lower()
     print(songe_title_clean)
-    tmp = requests.get(f"https://api.animethemes.moe/search?q={{{songe_title_clean}}}&page[limit]=1").json()
-    if  (tmp is None) or not tmp['search']['videos']:
-        print(" not tmp['search']['videos']")
+    res = requests.get(SONG_TO_ANIME_SEARCH_PATTERN.format(songe_title_clean)).json()
+    if  (res is None) or "videos" not in res['search'] or  not res['search']['videos']:
+        print("did not find the song's anime")
         return None
-    tmp_name = tmp['search']['videos'][0]['basename']
-    print(tmp_name)
-    camel_name = re.findall("[^-]+", tmp_name)[0]
-    print(camel_name)
-    lower_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', camel_name).lower()
-    if "OP" in tmp_name or "ED" in tmp_name:
+    video_filename = res['search']['videos'][0]['basename']
+    print(video_filename)
+    anime_name = re.findall("[^-]+", video_filename)[0]
+    print(anime_name)
+    lower_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', anime_name).lower()
+    # if the name is __OP/ED the video filename then the first part is the anime name
+    if "OP" in video_filename or "ED" in video_filename:
         return lower_name
-    name_search = requests.get(f"https://api.animethemes.moe/search?q={{{lower_name}}}&page[limit]=1").json()
-    if not tmp['search']['anime']:
+    # else we try to get the name by searching the name we just got
+    name_search = requests.get(ANIME_SEARCH_PATTERN.format(lower_name)).json()
+    if not name_search['search']['anime']:
         return lower_name
     name = name_search['search']['anime'][0]['name']
     return name
 
 def play_game():
     tmp = pd.read_json('mem.jsonl', lines=True)
-    context = driver.find_element('xpath',
-                                  "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[3]/div[2]/input")
+    context = driver.find_element('id', "qpAnswerInput")
+
+                                  
     j = tmp.to_dict(orient='list')
     mem_dict = dict(zip(j['song'], j['anime']))
 
-    ref_idx = driver.find_element('xpath',
-                                  "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[1]/div[1]/div/span[1]")
-    true_ans = driver.find_element('xpath',
-                                   "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[1]/div[2]")
-    count = driver.find_element('xpath',
-                                "/html/body/div[2]/div[1]/div[7]/div[1]/div[2]/div[8]/div[2]/div[2]/div/div/div[1]/div[5]/div")
+    ref_idx = driver.find_element('id', "qpCurrentSongCount")
+    true_ans = driver.find_element('id', "qpAnimeName")
+    count = driver.find_element('id', "qpHiderText")
     while true_ans.is_displayed():
         status = False
         left = count.text
@@ -116,12 +83,13 @@ def play_game():
                     anime = find_anime(song)
                 except Exception as e:
                     print(e)
+                    print(e.__traceback__)
             try:
                 context.send_keys(anime)
             except Exception:
                 print(f"anime is {anime}")
         else:
-            print("song is None, giving up")
+            print("did not find song, giving up")
 
         # wait for song revel and save answer
         while left != '':
